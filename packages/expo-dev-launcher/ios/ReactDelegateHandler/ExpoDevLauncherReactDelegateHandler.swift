@@ -4,11 +4,35 @@ import ExpoModulesCore
 import EXUpdatesInterface
 import React
 
-private class DevLauncherWrapperView: UIView {
+public class DevLauncherWrapperView: UIView {
   weak var devLauncherViewController: UIViewController?
 
+  #if os(iOS)
+  @objc
+  public func orientationDidChange() {
+    if let controller = devLauncherViewController {
+      setDevLauncherViewControllerConstraints(controller)
+    }
+  }
+  #endif
+
+  #if !os(macOS)
+  public func setDevLauncherViewControllerConstraints(_ viewController: UIViewController) {
+    viewController.view.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      viewController.view.topAnchor.constraint(equalTo: self.topAnchor),
+      viewController.view.leadingAnchor.constraint(equalTo: self.leadingAnchor),
+      viewController.view.trailingAnchor.constraint(equalTo: self.trailingAnchor),
+      viewController.view.bottomAnchor.constraint(equalTo: self.bottomAnchor)
+    ])
+  }
+  #endif
+
 #if !os(macOS)
-  override func didMoveToWindow() {
+  public override func didMoveToWindow() {
+    #if os(iOS)
+    NotificationCenter.default.addObserver(self, selector: #selector(orientationDidChange), name: UIDevice.orientationDidChangeNotification, object: nil)
+    #endif
     super.didMoveToWindow()
 
     guard let devLauncherViewController,
@@ -28,7 +52,7 @@ private class DevLauncherWrapperView: UIView {
     }
   }
 
-  override func willMove(toWindow newWindow: UIWindow?) {
+  public override func willMove(toWindow newWindow: UIWindow?) {
     super.willMove(toWindow: newWindow)
     if newWindow == nil {
       devLauncherViewController?.willMove(toParent: nil)
@@ -78,14 +102,7 @@ public class ExpoDevLauncherReactDelegateHandler: ExpoReactDelegateHandler, EXDe
     let wrapperView = DevLauncherWrapperView()
     wrapperView.devLauncherViewController = viewController
     wrapperView.addSubview(viewController.view)
-    viewController.view.translatesAutoresizingMaskIntoConstraints = false
-    NSLayoutConstraint.activate([
-      viewController.view.topAnchor.constraint(equalTo: wrapperView.topAnchor),
-      viewController.view.leadingAnchor.constraint(equalTo: wrapperView.leadingAnchor),
-      viewController.view.trailingAnchor.constraint(equalTo: wrapperView.trailingAnchor),
-      viewController.view.bottomAnchor.constraint(equalTo: wrapperView.bottomAnchor)
-    ])
-
+    wrapperView.setDevLauncherViewControllerConstraints(viewController)
     return wrapperView
   }
 
