@@ -1,24 +1,199 @@
----
-title: Create a project
-description: Learn how to create a new Expo project.
-hideTOC: true
----
+// Improved MatchWatch App with shared context, FlatList, and DateTimePicker
+import React, { useState, useMemo, useCallback, useContext } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Modal, Alert, Platform, StatusBar, KeyboardAvoidingView, Image } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { MaterialIcons } from '@expo/vector-icons';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 
-import { Terminal } from '~/ui/components/Snippet';
+// ----------------- Theme Context -----------------
+const primaryColor = '#FF6B35';
+const accentColor = '#FF8A65';
+const backgroundColor = '#F8FAFC';
+const cardColor = '#FFFFFF';
+const textPrimary = '#1F2937';
+const textSecondary = '#6B7280';
 
-System requirements:
+const ThemeContext = React.createContext();
+export const ThemeProvider = ({ children }) => {
+  const [darkMode, setDarkMode] = useState(false);
 
-- [Node.js (LTS)](https://nodejs.org/en/).
-- macOS, Windows (Powershell and [WSL 2](https://expo.fyi/wsl)), and Linux are supported.
+  const lightTheme = useMemo(() => ({
+    colors: { primary: primaryColor, accent: accentColor, background: backgroundColor, card: cardColor, textPrimary, textSecondary, border: '#E5E7EB', success: '#10B981', error: '#EF4444', warning: '#F59E0B' }
+  }), []);
 
-We recommend starting with the default project created by `create-expo-app`. The default project includes example code to help you get started.
+  const darkTheme = useMemo(() => ({
+    colors: { primary: primaryColor, accent: accentColor, background: '#1F2937', card: '#374151', textPrimary: '#F9FAFB', textSecondary: '#D1D5DB', border: '#4B5563', success: '#10B981', error: '#EF4444', warning: '#F59E0B' }
+  }), []);
 
-To create a new project, run the following command:
+  const toggleDarkMode = useCallback(() => setDarkMode(prev => !prev), []);
+  const theme = darkMode ? darkTheme : lightTheme;
 
-<Terminal cmd={['$ npx create-expo-app@latest']} />
+  return <ThemeContext.Provider value={{ theme, darkMode, toggleDarkMode }}>{children}</ThemeContext.Provider>;
+};
+export const useTheme = () => useContext(ThemeContext);
 
-> You can choose a different template by adding the [`--template` option](/more/create-expo/#--template).
+// ----------------- Matches Context -----------------
+const MatchesContext = React.createContext();
+export const MatchesProvider = ({ children }) => {
+  const [matches, setMatches] = useState([
+    { id: '1', homeTeam: 'Barcelona', awayTeam: 'Real Madrid', date: '2024-01-15T21:00', homeScore: 2, awayScore: 1, status: 'live', isFavorite: true },
+    { id: '2', homeTeam: 'Manchester United', awayTeam: 'Liverpool', date: '2024-01-16T20:30', homeScore: 0, awayScore: 0, status: 'upcoming', isFavorite: false }
+  ]);
 
-## Next step
+  const addMatch = (match) => setMatches(prev => [...prev, match]);
+  const toggleFavorite = (id) => setMatches(prev => prev.map(m => m.id === id ? { ...m, isFavorite: !m.isFavorite } : m));
+  const updateScore = (id, homeScore, awayScore) => setMatches(prev => prev.map(m => m.id === id ? { ...m, homeScore, awayScore, status: 'live' } : m));
 
-You have a project. Now it's time to set up your development environment so that you can start developing.
+  return <MatchesContext.Provider value={{ matches, addMatch, toggleFavorite, updateScore }}>{children}</MatchesContext.Provider>;
+};
+export const useMatches = () => useContext(MatchesContext);
+
+// ----------------- Screens -----------------
+const HomeScreen = () => {
+  const { theme } = useTheme();
+  const { matches, addMatch, toggleFavorite, updateScore } = useMatches();
+  const [showModal, setShowModal] = useState(false);
+  const [newMatch, setNewMatch] = useState({ homeTeam: '', awayTeam: '', date: new Date(), showPicker: false });
+
+  const handleAddMatch = () => {
+    if (!newMatch.homeTeam || !newMatch.awayTeam) {
+      Alert.alert('Error', 'Please enter both teams');
+      return;
+    }
+    addMatch({
+      id: Date.now().toString(),
+      homeTeam: newMatch.homeTeam,
+      awayTeam: newMatch.awayTeam,
+      date: newMatch.date.toISOString(),
+      homeScore: 0,
+      awayScore: 0,
+      status: 'upcoming',
+      isFavorite: false
+    });
+    setNewMatch({ homeTeam: '', awayTeam: '', date: new Date(), showPicker: false });
+    setShowModal(false);
+  };
+
+  const renderCard = ({ item }) => {
+    const statusColor = item.status === 'live' ? theme.colors.error : item.status === 'upcoming' ? theme.colors.warning : theme.colors.success;
+    return (
+      <View style={[styles.matchCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}> 
+        <View style={styles.matchHeader}>
+          <View style={[styles.statusBadge, { backgroundColor: statusColor }]}><Text style={{ color: '#fff' }}>{item.status.toUpperCase()}</Text></View>
+          <TouchableOpacity onPress={() => toggleFavorite(item.id)}><MaterialIcons name={item.isFavorite ? 'star' : 'star-border'} size={24} color={item.isFavorite ? theme.colors.warning : theme.colors.textSecondary} /></TouchableOpacity>
+        </View>
+        <View style={styles.matchTeams}>
+          <Text style={{ color: theme.colors.textPrimary }}>{item.homeTeam}</Text>
+          <Text style={{ color: theme.colors.textPrimary }}>{item.homeScore} - {item.awayScore}</Text>
+          <Text style={{ color: theme.colors.textPrimary }}>{item.awayTeam}</Text>
+        </View>
+        <Text style={{ color: theme.colors.textSecondary }}>{new Date(item.date).toLocaleString()}</Text>
+      </View>
+    );
+  };
+
+  return (
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <FlatList
+        data={matches}
+        keyExtractor={item => item.id}
+        renderItem={renderCard}
+        contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
+      />
+      <TouchableOpacity style={[styles.fab, { backgroundColor: theme.colors.primary }]} onPress={() => setShowModal(true)}>
+        <MaterialIcons name="add" size={24} color="#fff" />
+      </TouchableOpacity>
+
+      <Modal visible={showModal} transparent animationType="slide">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
+            <Text style={{ fontSize: 20, fontWeight: 'bold', marginBottom: 12, color: theme.colors.textPrimary }}>Add New Match</Text>
+            <TextInput placeholder="Home Team" value={newMatch.homeTeam} onChangeText={t => setNewMatch(prev => ({ ...prev, homeTeam: t }))} style={[styles.input, { backgroundColor: theme.colors.background, color: theme.colors.textPrimary, borderColor: theme.colors.border }]} placeholderTextColor={theme.colors.textSecondary} />
+            <TextInput placeholder="Away Team" value={newMatch.awayTeam} onChangeText={t => setNewMatch(prev => ({ ...prev, awayTeam: t }))} style={[styles.input, { backgroundColor: theme.colors.background, color: theme.colors.textPrimary, borderColor: theme.colors.border }]} placeholderTextColor={theme.colors.textSecondary} />
+            <TouchableOpacity onPress={() => setNewMatch(prev => ({ ...prev, showPicker: true }))} style={[styles.input, { justifyContent: 'center' }]}>
+              <Text style={{ color: theme.colors.textPrimary }}>{newMatch.date.toLocaleString()}</Text>
+            </TouchableOpacity>
+            {newMatch.showPicker && (
+              <DateTimePicker value={newMatch.date} mode="datetime" display="default" onChange={(e, date) => setNewMatch(prev => ({ ...prev, date: date || prev.date, showPicker: false }))} />
+            )}
+            <TouchableOpacity style={[styles.submitButton, { backgroundColor: theme.colors.primary }]} onPress={handleAddMatch}><Text style={{ color: '#fff', fontWeight: '600' }}>Add Match</Text></TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </View>
+  );
+};
+
+const FavoritesScreen = () => {
+  const { theme } = useTheme();
+  const { matches, toggleFavorite } = useMatches();
+  const favoriteMatches = matches.filter(m => m.isFavorite);
+
+  return (
+    <FlatList
+      data={favoriteMatches}
+      keyExtractor={item => item.id}
+      renderItem={({ item }) => (
+        <View style={[styles.matchCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <Text style={{ color: theme.colors.textPrimary }}>{item.homeTeam} {item.homeScore} - {item.awayScore} {item.awayTeam}</Text>
+          <TouchableOpacity onPress={() => toggleFavorite(item.id)}><MaterialIcons name="star" size={24} color={theme.colors.warning} /></TouchableOpacity>
+        </View>
+      )}
+      ListEmptyComponent={<Text style={{ color: theme.colors.textSecondary, textAlign: 'center', marginTop: 50 }}>No favorite matches yet</Text>}
+      contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
+    />
+  );
+};
+
+const SettingsScreen = () => {
+  const { theme, darkMode, toggleDarkMode } = useTheme();
+  return (
+    <View style={[styles.container, { backgroundColor: theme.colors.background, padding: 20 }]}>
+      <Text style={{ fontSize: 24, fontWeight: 'bold', color: theme.colors.textPrimary }}>Settings</Text>
+      <TouchableOpacity onPress={toggleDarkMode} style={{ marginTop: 20, padding: 12, backgroundColor: darkMode ? theme.colors.primary : theme.colors.border, borderRadius: 12 }}>
+        <Text style={{ color: '#fff' }}>Toggle Dark Mode</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+// ----------------- Navigation -----------------
+const Tab = createBottomTabNavigator();
+const TabNavigator = () => {
+  const { theme } = useTheme();
+  return (
+    <Tab.Navigator screenOptions={{ headerShown: false, tabBarStyle: { backgroundColor: theme.colors.card, borderTopColor: theme.colors.border, height: 70 }, tabBarActiveTintColor: theme.colors.primary, tabBarInactiveTintColor: theme.colors.textSecondary }}>
+      <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarIcon: props => <MaterialIcons name="sports-soccer" size={24} color={props.color} /> }} />
+      <Tab.Screen name="Favorites" component={FavoritesScreen} options={{ tabBarIcon: props => <MaterialIcons name="star" size={24} color={props.color} /> }} />
+      <Tab.Screen name="Settings" component={SettingsScreen} options={{ tabBarIcon: props => <MaterialIcons name="settings" size={24} color={props.color} /> }} />
+    </Tab.Navigator>
+  );
+};
+
+// ----------------- App -----------------
+export default function App() {
+  return (
+    <ThemeProvider>
+      <MatchesProvider>
+        <View style={{ flex: 1 }}>
+          <StatusBar barStyle="dark-content" />
+          <TabNavigator />
+        </View>
+      </MatchesProvider>
+    </ThemeProvider>
+  );
+}
+
+// ----------------- Styles -----------------
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  matchCard: { borderRadius: 16, padding: 20, marginBottom: 16, borderWidth: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
+  matchHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  matchTeams: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  fab: { position: 'absolute', bottom: 100, right: 20, width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 8 },
+  modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' },
+  modalContent: { width: '90%', borderRadius: 16, padding: 20, backgroundColor: '#fff' },
+  input: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 12 },
+  submitButton: { padding: 12, borderRadius: 12, alignItems: 'center', marginTop: 12 }
+});
