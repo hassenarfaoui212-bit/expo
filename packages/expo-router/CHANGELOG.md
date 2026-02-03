@@ -11,6 +11,8 @@
 ### 🐛 Bug fixes
 
 - Fix `expo-image` dependency range in `expo-router` ([#42808](https://github.com/expo/expo/pull/42808) by [@kitten](https://github.com/kitten))
+- detect incorrect screen presentation ([#42829](https://github.com/expo/expo/pull/42829) by [@Ubax](https://github.com/Ubax))
+
 
 ### 💡 Others
 
